@@ -1,0 +1,203 @@
+---
+title: "IP Course 2024"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    theme: !expr sample(c("yeti", "united", "lumen"), 1)
+date: "2024-05-14"
+
+---
+#### *Marco La Fortezza*. 
+#### e-mail: **marco.lafortezza@env.ethz.ch**. 
+#### All you need: **[GitHub](https://github.com/MarcoLF/IP_course_2024)**. 
+
+## Getting ready
+
+Load all dependencies that are required for this exercise. The following code will automatically install all the dependency that are not already present in your computer.
+
+```{r, echo=T}
+if (!require("pacman")) 
+  install.packages("pacman")
+pacman::p_load(car, reshape2, plyr, ggplot2, Hmisc, multcomp, colorDF)
+```
+
+Let's start by uploading our data set. Make sure to specify your directory properly. Here, if your dog ate your dataset or you had major issues in plating you can use directly access a data set from *GitHub*. However, remember that later you will need to test some of your own data...
+
+```{r, echo=T}
+input = "https://raw.githubusercontent.com/MarcoLF/IP_course_2024/main/IP%20course.csv"
+IP = as.data.frame(read.csv(input))
+IP$Plate = as.factor(IP$Plate)
+IP$Site = as.factor(IP$Site)
+```
+First of all let’s have a look at the data.
+
+```{r, echo=T}
+head(IP) #it shows by default the first 6 rows of the data set
+```
+
+```{r, echo=T}
+str(IP) #it shows the internal structure of the data set
+```
+
+This exercise focuses on the realization of Fig 7 (ref to Labnote II_2024.docx). With this specific figure we want to show all the differences found about the AB resistance across sites. It is usually a good practice to first sketch on paper the final graph we want to obtain. In this specific case, we aim to represent the CFU that we measured as a function of both plate type (w/o AB, and AB type) and the sampling site (A or B). We are essentially referring to a simple model...
+
+## the model
+...that is
+```{r, echo=T}
+model = aov(Log.CFU.gram ~ Plate + Site, data = IP) #note that we are already using the function for anova
+```
+However, we are also interested on whether the interaction between the two independent variables Plate and Site could explain possible differences. In other words we need to expand our model as
+```{r, echo=T}
+model = aov(Log.CFU.gram ~ Plate + Site + Plate:Site, data = IP)
+```
+*Note* - **In R, the above syntax is identical to Log.CFU.gram ~ Plate*Site**
+
+*Note* - **the model’s output contains a list of different arguments. To visualize them, just type: ls(model)**
+
+Here, we use a *two-way ANOVA* to answer our question. Thus, it could be relevant to first check whether variances are homogeneous and data normally distributed. We can first compute *Residulas vs Fitted* values calculated from the model.
+```{r, echo=T}
+plot(model, 1)
+```
+among all the data, the above graph shows that there are three data points (16, 18, 19; numbers refer to the raw entry in the data frame) that are actually considered to be outliers. In some instance, it is fine to remove those data as long as it is acknowledge to the reader. Also remember that outliers could be biologically informative. However, let’s first test formally for the homogeneity of the variances using the Levene’s test.
+```{r, echo=T}
+leveneTest(Log.CFU.gram ~ Plate*Site, data = IP)
+```
+The **Levene’s test** result in a **p-value = 0.83** which accepts the null-hypothesis. Thus, variances could be considered homogeneous.
+
+*Note* - **In the previous command line I specify the model for clarity. Yet, we could have directly refer to the model using: levenTest(model)**
+
+Let’s now check for normality. We do so by looking at the model’s residual distribution. First, we generate a graph that can already gives us a first picture on whether our data are normally distributed.
+```{r, echo=T}
+plot(model, 2)
+```
+Already from the *Q-Q plot* we can see that the data are not very normally distributed. We can test this more formally by firstly extracting the actual residulas from our model and then using the Shapiro test for normality.
+```{r, echo=T}
+resid = residuals(object = model)
+shapiro.test(x = resid)
+```
+**Shapiro test** confirmed our expectation and rejected the null-hypothesis for normality. This is most likely associated with the low sampling number. However, ANOVA is not strongly affected by deviation from normality **(Harwell et al 1992, Lix et al. 1996)**, while it is crucial the variance homogeneity. An alternative can be rank transform the measured dependent variable (Log.CFU.gram), see later. For additional information on type of ranking-based transformation, check *Conover and Iman (1981)*.
+
+## ggplot
+Now it could be useful to generate the graph we are interested in. We do
+so by using the ggplot package. You can find
+**[online](https://ggplot2.tidyverse.org/)** a large number of tutorials
+explaining how this package works (for beginners and advanced users).
+Here, I try to guide you through the vary basic concepts of *ggplot*
+that are relevant to our aim. If you already know how to use it, you can
+skip this specific part. To use **ggplot** you first need to define the
+parameters you want to graph. Thus, you need to specify the source of
+your data **data** (e.g., where ggplot needs to get the data from), and
+then define what in ggplot are called *aesthetics*, a fancy way to say x
+and y axis (and more). In our case, the data corresponds to the data
+frame named **IP** and the aesthetics are **Log.CFU.gram** and
+**Plate**.
+```{r, echo=T}
+ggplot(data = IP, aes(Plate, Log.CFU.gram)) #this is the base from where one starts to build the actual graph
+```
+
+Before plotting our data onto this gray area, there is an issue that
+maybe you have already noticed. At the beginning we mentioned *two*
+independent variables, but here, with this graph, we only have one which
+is **Plate**. How can we introduce the second variable that is the
+sampling **Site**? An easy way to do it is by coloring our data
+accordingly. We can expand the *aesthetics* with **col**.
+
+```{r, echo=T}
+ggplot(data = IP, aes(Plate, Log.CFU.gram, col = Site)) #this is the base from where one starts to build the actual graph
+```
+Amazing, still gray. Well, now we have all the bases and we can start to
+build our graph for real finally. To do so, we need to concatenate the
+first function *ggplot()* to others using the *+*. Specifically, now we
+will add our data as points and we also get rid of the gray background.
+```{r, echo=T}
+ggplot(IP, aes(Plate, Log.CFU.gram, col = Site))+
+  geom_jitter(width = 0.1)+ #this function spreads points along the x axis to avoid potential overlaps
+  theme_classic() #just less gray and lines. see theme() in ggplot for more
+```
+We finally have our first data graph. It is important to look at this
+plot and see that there are already from here interesting observation
+that can be made. Some of them are explorative, other more inferential.
+
+let's continue with
+
+## the actual test
+
+In the previous graph we have plotted all the data point we have
+collected. However, we most likely want to report average values and the
+inferential errors that are associated to them. With ggplot there is a
+very smart way to do so. We can use the fucntion *stat_summary* that, as
+the name suggests, can be use to summarise the actual statistics of the
+plotted data.
+```{r, echo=T}
+ggplot(IP, aes(Plate, Log.CFU.gram, col = Site))+
+  geom_point(position = position_dodge(width = 0.3), size = 2)+
+  stat_summary(aes(fill = Site), fun.data = mean_se, geom = "pointrange", 
+               position = position_dodge(width = 0.3), col = "black", pch= 21, size = 1)+
+  theme_classic()
+```
+
+Here, we are plotting the averages of 4 data points (4 independent
+measurements/students). The associated errors are SEM.
+
+Now let's work on the previous run *model* to
+better understand what we are observing on the above graph.
+Two-way ANOVA are usually performed on Type-III Sum Square (SS). SS tell us how much of the residual variability on our Y variable (Log.CFU.gram) is due to the factor e.g. *Plate* (but also *Site*) after having considered the factor *Site* (*Plate*) and the interaction *Site and Plate*. We can do so, by simply add the SS manually in the aov() function.
+```{r, echo=T}
+model = aov(Log.CFU.gram ~ Plate + Site + Plate:Site, data = IP,
+                contrasts = list(
+    Plate = 'contr.sum',
+    Site = 'contr.sum'))
+Anova(model, type = 'III')
+```
+However, earlier we saw that the data distribution was likely not normal. Let's see how much of a problem that is and how we can fix this issue. One way to deal with non-parametric distribution is to rank-transforming the dependent variable.
+```{r, echo=T, include=F}
+model.rnk = aov(rank(Log.CFU.gram) ~ Plate + Site + Plate:Site, data = IP,
+                contrasts = list(
+    Plate = 'contr.sum',
+    Site = 'contr.sum'
+  ))
+Anova(model.rnk, type = 'III')
+```
+In both cases, these model results indicate that both variables *Plate* and *Site* and
+their interaction contribute to the observed differences significantly.
+
+We can now ask which of the different plates are characterized by a
+significant difference between *Sites*. We can take single pairs and
+test them individually. With some basic R knowledge this is extremely
+easy and very helpful, also with more complex data set than ours. 
+Now it is very important to remember that the data are not normally
+distributed. Thus, if we would run a *t-test* we will increase
+considerably the chance of *Type-I Error*. We can instead use the
+*Wilcoxon test* that handles non-parametric distributions (another ranking approach).
+```{r, echo=T, include=F}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+WT = list()
+
+for(i in unique(IP$Plate)){
+  temp = IP[which(IP$Plate %in% i),]
+  p.val = wilcox.test(temp$Log.CFU.gram ~ temp$Site, alternative = "two.sided")$p.value
+  WT[[i]] = p.val
+}
+single.pairs = as.data.frame(do.call(rbind, WT))
+colnames(single.pairs) = "p.value"
+
+single.pairs
+```
+In all cases, there is always a significant difference between the two
+sites A and B with the exception of the AB kanamycin.
+
+We can increase the details of our analysis and ask for significant
+differences across all pairwise comparisons too. To do so, we cab run a
+*Wilcoxon Test* and correct the obtained *p-values* because of multiple
+testing.
+
+```{r, echo=T, include=T}
+p.w.t = pairwise.wilcox.test(IP$Log.CFU.gram, paste(IP$Plate, IP$Site), paired = FALSE, p.adjust.method ="BH")$p.value
+
+m.pwt = colorDF(melt(p.w.t, na.rm = T))
+col_type(m.pwt, "value") <- "pval"
+
+knitr::kable(m.pwt)
+```
